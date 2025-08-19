@@ -5,7 +5,7 @@ import { Navigation } from "@/components/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Clock, Users, Star, ChefHat, Utensils, ArrowRight, Loader2 } from "lucide-react"
+import { Clock, Users, Star, ChefHat, Utensils, ArrowRight, Loader2, Heart } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
 
@@ -23,6 +23,8 @@ interface Recipe {
     name?: string
     email: string
   }
+  likeCount?: number
+  userLiked?: boolean
 }
 
 interface PaginationData {
@@ -38,6 +40,7 @@ export default function Home() {
   const [pagination, setPagination] = useState<PaginationData | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [likingRecipeId, setLikingRecipeId] = useState<string | null>(null)
 
   useEffect(() => {
     fetchRecipes(1)
@@ -55,10 +58,23 @@ export default function Home() {
       if (response.ok) {
         const data = await response.json()
         
+        // Fetch like data for each recipe
+        const recipesWithLikes = await Promise.all(
+          data.recipes.map(async (recipe: Recipe) => {
+            const likeResponse = await fetch(`/api/likes?recipeId=${recipe.id}`)
+            const likeData = await likeResponse.json()
+            return {
+              ...recipe,
+              likeCount: likeData.likeCount || 0,
+              userLiked: likeData.userLiked || false
+            }
+          })
+        )
+        
         if (append) {
-          setRecipes(prev => [...prev, ...data.recipes])
+          setRecipes(prev => [...prev, ...recipesWithLikes])
         } else {
-          setRecipes(data.recipes)
+          setRecipes(recipesWithLikes)
         }
         
         setPagination(data.pagination)
@@ -68,6 +84,46 @@ export default function Home() {
     } finally {
       setLoading(false)
       setLoadingMore(false)
+    }
+  }
+
+  const handleLike = async (recipeId: string) => {
+    try {
+      setLikingRecipeId(recipeId)
+      
+      const response = await fetch("/api/likes", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ recipeId }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        
+        // Update the recipe in the state
+        setRecipes(prev => prev.map(recipe => {
+          if (recipe.id === recipeId) {
+            return {
+              ...recipe,
+              likeCount: data.liked ? (recipe.likeCount || 0) + 1 : (recipe.likeCount || 0) - 1,
+              userLiked: data.liked
+            }
+          }
+          return recipe
+        }))
+      } else {
+        // If not authenticated, redirect to sign in
+        const errorData = await response.json()
+        if (errorData.error === "Authentication required") {
+          window.location.href = "/auth/signin"
+        }
+      }
+    } catch (error) {
+      console.error("Failed to like recipe:", error)
+    } finally {
+      setLikingRecipeId(null)
     }
   }
 
@@ -181,9 +237,26 @@ export default function Home() {
                       <Badge className="bg-white/20 text-white border-white/30">
                         {recipe.status === "PUBLISHED" ? "Published" : recipe.status}
                       </Badge>
-                      <div className="flex items-center space-x-1 bg-white/20 rounded-full px-2 py-1">
-                        <Star className="h-4 w-4 text-yellow-300 fill-current" />
-                        <span className="text-xs text-white">4.8</span>
+                      <div className="flex items-center space-x-2">
+                        <div className="flex items-center space-x-1 bg-white/20 rounded-full px-2 py-1">
+                          <Star className="h-4 w-4 text-yellow-300 fill-current" />
+                          <span className="text-xs text-white">4.8</span>
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault()
+                            handleLike(recipe.id)
+                          }}
+                          disabled={likingRecipeId === recipe.id}
+                          className="flex items-center space-x-1 bg-white/20 rounded-full px-2 py-1 hover:bg-white/30 transition-colors disabled:opacity-50"
+                        >
+                          <Heart 
+                            className={`h-4 w-4 ${recipe.userLiked ? 'text-red-500 fill-current' : 'text-white'}`} 
+                          />
+                          <span className="text-xs text-white">
+                            {likingRecipeId === recipe.id ? '...' : recipe.likeCount || 0}
+                          </span>
+                        </button>
                       </div>
                     </div>
                     <CardTitle className="text-xl text-white mb-2">{recipe.title}</CardTitle>

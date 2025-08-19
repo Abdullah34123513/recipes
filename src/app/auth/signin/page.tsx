@@ -152,9 +152,9 @@ export default function SignIn() {
               <div className="text-center">
                 <p className="text-sm text-gray-600">
                   Don't have an account?{" "}
-                  <a href="#" className="text-orange-600 hover:text-orange-700 font-medium">
-                    Contact admin
-                  </a>
+                  <Link href="/auth/signup" className="text-orange-600 hover:text-orange-700 font-medium">
+                    Sign up here
+                  </Link>
                 </p>
               </div>
             </CardContent>
