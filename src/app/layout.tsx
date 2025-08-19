@@ -15,20 +15,17 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Recipe Hub - Share & Discover Amazing Recipes",
-  description: "A community-driven recipe website where users can submit, share, and discover delicious recipes. Join our culinary community today!",
+  title: "Recipe Website",
+  description: "A community-driven recipe website where users can submit, share, and discover delicious recipes.",
   keywords: ["recipes", "cooking", "food", "culinary", "meal ideas", "recipe sharing"],
-  authors: [{ name: "Recipe Hub Team" }],
   openGraph: {
-    title: "Recipe Hub - Share & Discover Amazing Recipes",
+    title: "Recipe Website",
     description: "A community-driven recipe website where users can submit, share, and discover delicious recipes.",
-    url: "https://recipehub.com",
-    siteName: "Recipe Hub",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Recipe Hub - Share & Discover Amazing Recipes",
+    title: "Recipe Website",
     description: "A community-driven recipe website where users can submit, share, and discover delicious recipes.",
   },
 };

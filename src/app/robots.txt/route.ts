@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 
 export function GET() {
-  const baseUrl = "https://recipehub.com"
+  const baseUrl = "https://yourdomain.com"
   
   const robotsTxt = `User-agent: *
 Allow: /

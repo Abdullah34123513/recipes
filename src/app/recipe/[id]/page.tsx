@@ -68,7 +68,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const description = `Delicious ${recipe.title} recipe. Ingredients: ${ingredients.slice(0, 3).join(", ")}. Prep time: ${recipe.prepTime} minutes. Serves: ${recipe.servingSize}.`
 
   return {
-    title: `${recipe.title} - Recipe Hub`,
+    title: `${recipe.title} - Recipe Website`,
     description,
     keywords: [
       recipe.title,
@@ -78,7 +78,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       ...ingredients.slice(0, 5)
     ],
     openGraph: {
-      title: `${recipe.title} - Recipe Hub`,
+      title: `${recipe.title} - Recipe Website`,
       description,
       images: recipe.image ? [recipe.image] : [],
       type: "article",
@@ -87,7 +87,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     },
     twitter: {
       card: "summary_large_image",
-      title: `${recipe.title} - Recipe Hub`,
+      title: `${recipe.title} - Recipe Website`,
       description,
       images: recipe.image ? [recipe.image] : [],
     },
