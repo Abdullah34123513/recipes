@@ -70,7 +70,7 @@ npm run build
 npm start
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to see your application running.
+Open [http://localhost:3001](http://localhost:3001) to see your application running.
 
 ## 🤖 Powered by Z.ai
 
