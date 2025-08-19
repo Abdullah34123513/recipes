@@ -5,7 +5,7 @@ import { Navigation } from "@/components/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Clock, Users, Star, ChefHat, Utensils, ArrowRight } from "lucide-react"
+import { Clock, Users, Star, ChefHat, Utensils, ArrowRight, Loader2 } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
 
@@ -25,25 +25,55 @@ interface Recipe {
   }
 }
 
+interface PaginationData {
+  currentPage: number
+  totalPages: number
+  totalRecipes: number
+  hasNextPage: boolean
+  hasPreviousPage: boolean
+}
+
 export default function Home() {
   const [recipes, setRecipes] = useState<Recipe[]>([])
+  const [pagination, setPagination] = useState<PaginationData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
 
   useEffect(() => {
-    fetchRecipes()
+    fetchRecipes(1)
   }, [])
 
-  const fetchRecipes = async () => {
+  const fetchRecipes = async (page: number = 1, append: boolean = false) => {
     try {
-      const response = await fetch("/api/recipes")
+      if (page === 1) {
+        setLoading(true)
+      } else {
+        setLoadingMore(true)
+      }
+
+      const response = await fetch(`/api/recipes?page=${page}&limit=20`)
       if (response.ok) {
         const data = await response.json()
-        setRecipes(data)
+        
+        if (append) {
+          setRecipes(prev => [...prev, ...data.recipes])
+        } else {
+          setRecipes(data.recipes)
+        }
+        
+        setPagination(data.pagination)
       }
     } catch (error) {
       console.error("Failed to fetch recipes:", error)
     } finally {
       setLoading(false)
+      setLoadingMore(false)
+    }
+  }
+
+  const loadMoreRecipes = () => {
+    if (pagination && pagination.hasNextPage && !loadingMore) {
+      fetchRecipes(pagination.currentPage + 1, true)
     }
   }
 
@@ -103,7 +133,9 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-center">
             <div className="bg-white rounded-2xl p-6 shadow-lg border border-orange-100">
-              <div className="text-3xl font-bold text-orange-500 mb-2">{recipes.length}</div>
+              <div className="text-3xl font-bold text-orange-500 mb-2">
+                {pagination?.totalRecipes || recipes.length}
+              </div>
               <div className="text-gray-600">Delicious Recipes</div>
             </div>
             <div className="bg-white rounded-2xl p-6 shadow-lg border border-red-100">
@@ -139,82 +171,110 @@ export default function Home() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {recipes.map((recipe) => (
-              <div key={recipe.id} className="recipe-card group">
-                {/* Recipe Image Header */}
-                <div className="recipe-card-header">
-                  <div className="flex justify-between items-start mb-2">
-                    <Badge className="bg-white/20 text-white border-white/30">
-                      {recipe.status === "PUBLISHED" ? "Published" : recipe.status}
-                    </Badge>
-                    <div className="flex items-center space-x-1 bg-white/20 rounded-full px-2 py-1">
-                      <Star className="h-4 w-4 text-yellow-300 fill-current" />
-                      <span className="text-xs text-white">4.8</span>
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {recipes.map((recipe) => (
+                <div key={recipe.id} className="recipe-card group">
+                  {/* Recipe Image Header */}
+                  <div className="recipe-card-header">
+                    <div className="flex justify-between items-start mb-2">
+                      <Badge className="bg-white/20 text-white border-white/30">
+                        {recipe.status === "PUBLISHED" ? "Published" : recipe.status}
+                      </Badge>
+                      <div className="flex items-center space-x-1 bg-white/20 rounded-full px-2 py-1">
+                        <Star className="h-4 w-4 text-yellow-300 fill-current" />
+                        <span className="text-xs text-white">4.8</span>
+                      </div>
                     </div>
+                    <CardTitle className="text-xl text-white mb-2">{recipe.title}</CardTitle>
+                    <CardDescription className="text-orange-100">
+                      By {recipe.author.name || recipe.author.email}
+                    </CardDescription>
                   </div>
-                  <CardTitle className="text-xl text-white mb-2">{recipe.title}</CardTitle>
-                  <CardDescription className="text-orange-100">
-                    By {recipe.author.name || recipe.author.email}
-                  </CardDescription>
-                </div>
 
-                {/* Recipe Image */}
-                <div className="relative h-48 overflow-hidden">
-                  {recipe.image ? (
-                    <Image
-                      src={recipe.image}
-                      alt={recipe.title}
-                      fill
-                      className="object-cover group-hover:scale-110 transition-transform duration-300"
-                    />
+                  {/* Recipe Image */}
+                  <div className="relative h-48 overflow-hidden">
+                    {recipe.image ? (
+                      <Image
+                        src={recipe.image}
+                        alt={recipe.title}
+                        fill
+                        className="object-cover group-hover:scale-110 transition-transform duration-300"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-orange-200 to-red-200 flex items-center justify-center">
+                        <ChefHat className="h-16 w-16 text-orange-600" />
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-black/20 group-hover:bg-black/30 transition-all duration-300"></div>
+                  </div>
+
+                  {/* Recipe Content */}
+                  <div className="recipe-content">
+                    <div className="flex items-center justify-between text-sm text-gray-600 mb-4">
+                      <div className="flex items-center space-x-2">
+                        <Clock className="h-4 w-4 text-orange-500" />
+                        <span className="font-medium">{recipe.prepTime} min</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Users className="h-4 w-4 text-red-500" />
+                        <span className="font-medium">{recipe.servingSize} servings</span>
+                      </div>
+                    </div>
+                    
+                    <div className="mb-4">
+                      <h4 className="font-semibold text-gray-900 mb-2">Ingredients</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {JSON.parse(recipe.ingredients).slice(0, 3).map((ingredient: string, index: number) => (
+                          <span key={index} className="ingredient-badge">
+                            {ingredient}
+                          </span>
+                        ))}
+                        {JSON.parse(recipe.ingredients).length > 3 && (
+                          <span className="ingredient-badge">
+                            +{JSON.parse(recipe.ingredients).length - 3} more
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <Link href={`/recipe/${recipe.id}`}>
+                      <Button className="btn-primary w-full">
+                        View Recipe
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Load More Button */}
+            {pagination && pagination.hasNextPage && (
+              <div className="text-center mt-12">
+                <Button
+                  onClick={loadMoreRecipes}
+                  disabled={loadingMore}
+                  className="btn-secondary text-lg px-8 py-4"
+                >
+                  {loadingMore ? (
+                    <>
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      Loading More...
+                    </>
                   ) : (
-                    <div className="w-full h-full bg-gradient-to-br from-orange-200 to-red-200 flex items-center justify-center">
-                      <ChefHat className="h-16 w-16 text-orange-600" />
-                    </div>
+                    <>
+                      Load More Recipes
+                      <ArrowRight className="ml-2 h-5 w-5" />
+                    </>
                   )}
-                  <div className="absolute inset-0 bg-black/20 group-hover:bg-black/30 transition-all duration-300"></div>
-                </div>
-
-                {/* Recipe Content */}
-                <div className="recipe-content">
-                  <div className="flex items-center justify-between text-sm text-gray-600 mb-4">
-                    <div className="flex items-center space-x-2">
-                      <Clock className="h-4 w-4 text-orange-500" />
-                      <span className="font-medium">{recipe.prepTime} min</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Users className="h-4 w-4 text-red-500" />
-                      <span className="font-medium">{recipe.servingSize} servings</span>
-                    </div>
-                  </div>
-                  
-                  <div className="mb-4">
-                    <h4 className="font-semibold text-gray-900 mb-2">Ingredients</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {JSON.parse(recipe.ingredients).slice(0, 3).map((ingredient: string, index: number) => (
-                        <span key={index} className="ingredient-badge">
-                          {ingredient}
-                        </span>
-                      ))}
-                      {JSON.parse(recipe.ingredients).length > 3 && (
-                        <span className="ingredient-badge">
-                          +{JSON.parse(recipe.ingredients).length - 3} more
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <Link href={`/recipe/${recipe.id}`}>
-                    <Button className="btn-primary w-full">
-                      View Recipe
-                      <ArrowRight className="ml-2 h-4 w-4" />
-                    </Button>
-                  </Link>
-                </div>
+                </Button>
+                <p className="mt-2 text-sm text-gray-600">
+                  Showing {recipes.length} of {pagination.totalRecipes} recipes
+                </p>
               </div>
-            ))}
-          </div>
+            )}
+          </>
         )}
       </div>
 

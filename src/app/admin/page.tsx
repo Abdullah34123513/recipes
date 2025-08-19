@@ -13,8 +13,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Progress } from "@/components/ui/progress"
 import { toast } from "sonner"
-import { Download, Upload, Eye, Edit, Trash2 } from "lucide-react"
+import { Download, Upload, Eye, Edit, Trash2, Loader2, ChevronLeft, ChevronRight } from "lucide-react"
 
 interface Recipe {
   id: string
@@ -32,10 +33,19 @@ interface Recipe {
   }
 }
 
+interface PaginationData {
+  currentPage: number
+  totalPages: number
+  totalRecipes: number
+  hasNextPage: boolean
+  hasPreviousPage: boolean
+}
+
 export default function AdminPanel() {
   const { data: session } = useSession()
   const router = useRouter()
   const [recipes, setRecipes] = useState<Recipe[]>([])
+  const [pagination, setPagination] = useState<PaginationData | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
@@ -48,21 +58,26 @@ export default function AdminPanel() {
     image: "",
     status: ""
   })
+  const [statusFilter, setStatusFilter] = useState("ALL")
+  const [importLoading, setImportLoading] = useState(false)
+  const [importProgress, setImportProgress] = useState(0)
 
   useEffect(() => {
     if (session?.user.role !== "ADMIN") {
       router.push("/")
       return
     }
-    fetchRecipes()
+    fetchRecipes(1)
   }, [session, router])
 
-  const fetchRecipes = async () => {
+  const fetchRecipes = async (page: number = 1, status: string = statusFilter) => {
     try {
-      const response = await fetch("/api/admin/recipes")
+      setLoading(true)
+      const response = await fetch(`/api/admin/recipes?page=${page}&limit=20&status=${status}`)
       if (response.ok) {
         const data = await response.json()
-        setRecipes(data)
+        setRecipes(data.recipes)
+        setPagination(data.pagination)
       }
     } catch (error) {
       console.error("Failed to fetch recipes:", error)
@@ -83,7 +98,7 @@ export default function AdminPanel() {
 
       if (response.ok) {
         toast.success("Recipe status updated successfully")
-        fetchRecipes()
+        fetchRecipes(pagination?.currentPage || 1)
       } else {
         toast.error("Failed to update recipe status")
       }
@@ -130,7 +145,7 @@ export default function AdminPanel() {
       if (response.ok) {
         toast.success("Recipe updated successfully")
         setIsEditDialogOpen(false)
-        fetchRecipes()
+        fetchRecipes(pagination?.currentPage || 1)
       } else {
         toast.error("Failed to update recipe")
       }
@@ -150,7 +165,7 @@ export default function AdminPanel() {
 
       if (response.ok) {
         toast.success("Recipe deleted successfully")
-        fetchRecipes()
+        fetchRecipes(pagination?.currentPage || 1)
       } else {
         toast.error("Failed to delete recipe")
       }
@@ -180,36 +195,73 @@ export default function AdminPanel() {
     }
   }
 
-  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
 
-    const reader = new FileReader()
-    reader.onload = async (e) => {
-      try {
-        const content = e.target?.result as string
-        const recipes = JSON.parse(content)
-        
-        const response = await fetch("/api/admin/recipes/import", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify(recipes)
-        })
+    setImportLoading(true)
+    setImportProgress(0)
 
-        if (response.ok) {
-          toast.success("Recipes imported successfully")
-          fetchRecipes()
-        } else {
-          toast.error("Failed to import recipes")
+    try {
+      const content = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = (e) => resolve(e.target?.result as string)
+        reader.onerror = reject
+        reader.readAsText(file)
+      })
+
+      const recipes = JSON.parse(content)
+      
+      // Simulate progress for large imports
+      const totalRecipes = recipes.length
+      const batchSize = 50
+      let processed = 0
+
+      const progressInterval = setInterval(() => {
+        processed = Math.min(processed + batchSize, totalRecipes)
+        setImportProgress((processed / totalRecipes) * 100)
+        
+        if (processed >= totalRecipes) {
+          clearInterval(progressInterval)
         }
-      } catch (error) {
-        console.error("Error importing recipes:", error)
+      }, 500)
+
+      const response = await fetch("/api/admin/recipes/import", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(recipes)
+      })
+
+      clearInterval(progressInterval)
+      setImportProgress(100)
+
+      if (response.ok) {
+        const result = await response.json()
+        toast.success(`Import completed: ${result.imported} imported, ${result.failed} failed (${result.successRate}% success rate)`)
+        fetchRecipes(1)
+      } else {
         toast.error("Failed to import recipes")
       }
+    } catch (error) {
+      console.error("Error importing recipes:", error)
+      toast.error("Failed to import recipes")
+    } finally {
+      setImportLoading(false)
+      setImportProgress(0)
+      // Reset file input
+      event.target.value = ""
     }
-    reader.readAsText(file)
+  }
+
+  const handlePageChange = (page: number) => {
+    fetchRecipes(page, statusFilter)
+  }
+
+  const handleStatusFilterChange = (status: string) => {
+    setStatusFilter(status)
+    fetchRecipes(1, status)
   }
 
   if (loading) {
@@ -243,22 +295,63 @@ export default function AdminPanel() {
                 type="file"
                 accept=".json"
                 onChange={handleImport}
+                disabled={importLoading}
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               />
-              <Button variant="outline">
-                <Upload className="mr-2 h-4 w-4" />
+              <Button variant="outline" disabled={importLoading}>
+                {importLoading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Upload className="mr-2 h-4 w-4" />
+                )}
                 Import JSON
               </Button>
             </div>
           </div>
         </div>
 
+        {importLoading && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle>Importing Recipes</CardTitle>
+              <CardDescription>
+                Please wait while we process your recipe data...
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Progress value={importProgress} className="mb-2" />
+              <p className="text-sm text-gray-600">
+                {importProgress.toFixed(1)}% complete
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
           <CardHeader>
-            <CardTitle>Recipe Management</CardTitle>
-            <CardDescription>
-              Review and manage all recipe submissions
-            </CardDescription>
+            <div className="flex justify-between items-center">
+              <div>
+                <CardTitle>Recipe Management</CardTitle>
+                <CardDescription>
+                  Review and manage all recipe submissions
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600">Filter:</span>
+                <Select value={statusFilter} onValueChange={handleStatusFilterChange}>
+                  <SelectTrigger className="w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">All</SelectItem>
+                    <SelectItem value="PENDING">Pending</SelectItem>
+                    <SelectItem value="APPROVED">Approved</SelectItem>
+                    <SelectItem value="PUBLISHED">Published</SelectItem>
+                    <SelectItem value="REJECTED">Rejected</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             <Table>
@@ -324,6 +417,37 @@ export default function AdminPanel() {
                 ))}
               </TableBody>
             </Table>
+
+            {pagination && pagination.totalPages > 1 && (
+              <div className="flex justify-between items-center mt-4">
+                <div className="text-sm text-gray-600">
+                  Showing {((pagination.currentPage - 1) * 20) + 1} - {Math.min(pagination.currentPage * 20, pagination.totalRecipes)} of {pagination.totalRecipes} recipes
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(pagination.currentPage - 1)}
+                    disabled={!pagination.hasPreviousPage}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Previous
+                  </Button>
+                  <span className="flex items-center px-3 text-sm">
+                    Page {pagination.currentPage} of {pagination.totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(pagination.currentPage + 1)}
+                    disabled={!pagination.hasNextPage}
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 

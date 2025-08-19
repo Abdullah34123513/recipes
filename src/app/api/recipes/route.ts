@@ -1,26 +1,51 @@
 import { NextResponse } from "next/server"
 import { db } from "@/lib/db"
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const recipes = await db.recipe.findMany({
-      where: {
-        status: "PUBLISHED"
-      },
-      include: {
-        author: {
-          select: {
-            name: true,
-            email: true
+    const { searchParams } = new URL(request.url)
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '20')
+    const offset = (page - 1) * limit
+
+    const [recipes, total] = await Promise.all([
+      db.recipe.findMany({
+        where: {
+          status: "PUBLISHED"
+        },
+        include: {
+          author: {
+            select: {
+              name: true,
+              email: true
+            }
           }
+        },
+        orderBy: {
+          publishedAt: "desc"
+        },
+        skip: offset,
+        take: limit
+      }),
+      db.recipe.count({
+        where: {
+          status: "PUBLISHED"
         }
-      },
-      orderBy: {
-        publishedAt: "desc"
+      })
+    ])
+
+    const totalPages = Math.ceil(total / limit)
+
+    return NextResponse.json({
+      recipes,
+      pagination: {
+        currentPage: page,
+        totalPages,
+        totalRecipes: total,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1
       }
     })
-
-    return NextResponse.json(recipes)
   } catch (error) {
     console.error("Failed to fetch recipes:", error)
     return NextResponse.json(
