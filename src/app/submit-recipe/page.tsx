@@ -36,8 +36,19 @@ export default function SubmitRecipe() {
   const [steps, setSteps] = useState<Step[]>([{ id: "1", text: "" }])
 
   if (!session) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-red-50 to-pink-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">Redirecting to sign in...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Redirect to sign in page after component mounts
+  if (typeof window !== 'undefined' && !session) {
     router.push("/auth/signin")
-    return null
   }
 
   const addIngredient = () => {
