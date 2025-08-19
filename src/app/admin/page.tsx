@@ -1,0 +1,422 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import { useSession } from "next-auth/react"
+import { useRouter } from "next/navigation"
+import { Navigation } from "@/components/navigation"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { toast } from "sonner"
+import { Download, Upload, Eye, Edit, Trash2 } from "lucide-react"
+
+interface Recipe {
+  id: string
+  title: string
+  ingredients: string
+  steps: string
+  image?: string
+  prepTime: number
+  servingSize: number
+  status: string
+  createdAt: string
+  author: {
+    name?: string
+    email: string
+  }
+}
+
+export default function AdminPanel() {
+  const { data: session } = useSession()
+  const router = useRouter()
+  const [recipes, setRecipes] = useState<Recipe[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [editForm, setEditForm] = useState({
+    title: "",
+    ingredients: "",
+    steps: "",
+    prepTime: "",
+    servingSize: "",
+    image: "",
+    status: ""
+  })
+
+  useEffect(() => {
+    if (session?.user.role !== "ADMIN") {
+      router.push("/")
+      return
+    }
+    fetchRecipes()
+  }, [session, router])
+
+  const fetchRecipes = async () => {
+    try {
+      const response = await fetch("/api/admin/recipes")
+      if (response.ok) {
+        const data = await response.json()
+        setRecipes(data)
+      }
+    } catch (error) {
+      console.error("Failed to fetch recipes:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleStatusChange = async (recipeId: string, newStatus: string) => {
+    try {
+      const response = await fetch(`/api/recipes/${recipeId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ status: newStatus })
+      })
+
+      if (response.ok) {
+        toast.success("Recipe status updated successfully")
+        fetchRecipes()
+      } else {
+        toast.error("Failed to update recipe status")
+      }
+    } catch (error) {
+      console.error("Error updating recipe status:", error)
+      toast.error("Failed to update recipe status")
+    }
+  }
+
+  const handleEdit = (recipe: Recipe) => {
+    setSelectedRecipe(recipe)
+    setEditForm({
+      title: recipe.title,
+      ingredients: JSON.parse(recipe.ingredients).join("\n"),
+      steps: JSON.parse(recipe.steps).join("\n"),
+      prepTime: recipe.prepTime.toString(),
+      servingSize: recipe.servingSize.toString(),
+      image: recipe.image || "",
+      status: recipe.status
+    })
+    setIsEditDialogOpen(true)
+  }
+
+  const handleSaveEdit = async () => {
+    if (!selectedRecipe) return
+
+    try {
+      const response = await fetch(`/api/recipes/${selectedRecipe.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          title: editForm.title,
+          ingredients: editForm.ingredients.split("\n").filter(i => i.trim()),
+          steps: editForm.steps.split("\n").filter(s => s.trim()),
+          prepTime: parseInt(editForm.prepTime),
+          servingSize: parseInt(editForm.servingSize),
+          image: editForm.image || null,
+          status: editForm.status
+        })
+      })
+
+      if (response.ok) {
+        toast.success("Recipe updated successfully")
+        setIsEditDialogOpen(false)
+        fetchRecipes()
+      } else {
+        toast.error("Failed to update recipe")
+      }
+    } catch (error) {
+      console.error("Error updating recipe:", error)
+      toast.error("Failed to update recipe")
+    }
+  }
+
+  const handleDelete = async (recipeId: string) => {
+    if (!confirm("Are you sure you want to delete this recipe?")) return
+
+    try {
+      const response = await fetch(`/api/recipes/${recipeId}`, {
+        method: "DELETE"
+      })
+
+      if (response.ok) {
+        toast.success("Recipe deleted successfully")
+        fetchRecipes()
+      } else {
+        toast.error("Failed to delete recipe")
+      }
+    } catch (error) {
+      console.error("Error deleting recipe:", error)
+      toast.error("Failed to delete recipe")
+    }
+  }
+
+  const handleExport = async () => {
+    try {
+      const response = await fetch("/api/admin/recipes/export")
+      if (response.ok) {
+        const data = await response.json()
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = "recipes.json"
+        a.click()
+        URL.revokeObjectURL(url)
+        toast.success("Recipes exported successfully")
+      }
+    } catch (error) {
+      console.error("Error exporting recipes:", error)
+      toast.error("Failed to export recipes")
+    }
+  }
+
+  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = async (e) => {
+      try {
+        const content = e.target?.result as string
+        const recipes = JSON.parse(content)
+        
+        const response = await fetch("/api/admin/recipes/import", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(recipes)
+        })
+
+        if (response.ok) {
+          toast.success("Recipes imported successfully")
+          fetchRecipes()
+        } else {
+          toast.error("Failed to import recipes")
+        }
+      } catch (error) {
+        console.error("Error importing recipes:", error)
+        toast.error("Failed to import recipes")
+      }
+    }
+    reader.readAsText(file)
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navigation />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="text-center">Loading admin panel...</div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Navigation />
+      
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Admin Panel</h1>
+            <p className="text-gray-600">Manage recipes and user submissions</p>
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={handleExport} variant="outline">
+              <Download className="mr-2 h-4 w-4" />
+              Export JSON
+            </Button>
+            <div className="relative">
+              <input
+                type="file"
+                accept=".json"
+                onChange={handleImport}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              />
+              <Button variant="outline">
+                <Upload className="mr-2 h-4 w-4" />
+                Import JSON
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Recipe Management</CardTitle>
+            <CardDescription>
+              Review and manage all recipe submissions
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Title</TableHead>
+                  <TableHead>Author</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recipes.map((recipe) => (
+                  <TableRow key={recipe.id}>
+                    <TableCell className="font-medium">{recipe.title}</TableCell>
+                    <TableCell>{recipe.author.name || recipe.author.email}</TableCell>
+                    <TableCell>
+                      <Select
+                        value={recipe.status}
+                        onValueChange={(value) => handleStatusChange(recipe.id, value)}
+                      >
+                        <SelectTrigger className="w-32">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="PENDING">Pending</SelectItem>
+                          <SelectItem value="APPROVED">Approved</SelectItem>
+                          <SelectItem value="PUBLISHED">Published</SelectItem>
+                          <SelectItem value="REJECTED">Rejected</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
+                    <TableCell>
+                      {new Date(recipe.createdAt).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => window.open(`/recipe/${recipe.id}`, "_blank")}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleEdit(recipe)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDelete(recipe.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Edit Recipe</DialogTitle>
+              <DialogDescription>
+                Make changes to the recipe below
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="title">Title</Label>
+                <Input
+                  id="title"
+                  value={editForm.title}
+                  onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="prepTime">Prep Time (minutes)</Label>
+                  <Input
+                    id="prepTime"
+                    type="number"
+                    value={editForm.prepTime}
+                    onChange={(e) => setEditForm({ ...editForm, prepTime: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="servingSize">Serving Size</Label>
+                  <Input
+                    id="servingSize"
+                    type="number"
+                    value={editForm.servingSize}
+                    onChange={(e) => setEditForm({ ...editForm, servingSize: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="image">Image URL</Label>
+                <Input
+                  id="image"
+                  value={editForm.image}
+                  onChange={(e) => setEditForm({ ...editForm, image: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ingredients">Ingredients (one per line)</Label>
+                <Textarea
+                  id="ingredients"
+                  value={editForm.ingredients}
+                  onChange={(e) => setEditForm({ ...editForm, ingredients: e.target.value })}
+                  rows={6}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="steps">Steps (one per line)</Label>
+                <Textarea
+                  id="steps"
+                  value={editForm.steps}
+                  onChange={(e) => setEditForm({ ...editForm, steps: e.target.value })}
+                  rows={8}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="status">Status</Label>
+                <Select
+                  value={editForm.status}
+                  onValueChange={(value) => setEditForm({ ...editForm, status: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PENDING">Pending</SelectItem>
+                    <SelectItem value="APPROVED">Approved</SelectItem>
+                    <SelectItem value="PUBLISHED">Published</SelectItem>
+                    <SelectItem value="REJECTED">Rejected</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex gap-2">
+                <Button onClick={handleSaveEdit}>Save Changes</Button>
+                <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </div>
+  )
+}
