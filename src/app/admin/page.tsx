@@ -9,13 +9,14 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Progress } from "@/components/ui/progress"
 import { toast } from "sonner"
-import { Download, Upload, Eye, Edit, Trash2, Loader2, ChevronLeft, ChevronRight } from "lucide-react"
+import { Download, Upload, Eye, Edit, Trash2, Loader2, ChevronLeft, ChevronRight, AlertTriangle, Database } from "lucide-react"
 
 interface Recipe {
   id: string
@@ -61,6 +62,7 @@ export default function AdminPanel() {
   const [statusFilter, setStatusFilter] = useState("ALL")
   const [importLoading, setImportLoading] = useState(false)
   const [importProgress, setImportProgress] = useState(0)
+  const [wipeLoading, setWipeLoading] = useState(false)
 
   useEffect(() => {
     if (session?.user.role !== "ADMIN") {
@@ -255,6 +257,29 @@ export default function AdminPanel() {
     }
   }
 
+  const handleWipeDatabase = async () => {
+    setWipeLoading(true)
+    
+    try {
+      const response = await fetch("/api/admin/recipes/wipe", {
+        method: "POST"
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        toast.success(result.message)
+        fetchRecipes(1, statusFilter)
+      } else {
+        toast.error("Failed to wipe recipe database")
+      }
+    } catch (error) {
+      console.error("Error wiping database:", error)
+      toast.error("Failed to wipe recipe database")
+    } finally {
+      setWipeLoading(false)
+    }
+  }
+
   const handlePageChange = (page: number) => {
     fetchRecipes(page, statusFilter)
   }
@@ -307,6 +332,47 @@ export default function AdminPanel() {
                 Import JSON
               </Button>
             </div>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" disabled={wipeLoading || importLoading}>
+                  {wipeLoading ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Database className="mr-2 h-4 w-4" />
+                  )}
+                  Wipe Database
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5 text-red-600" />
+                    Confirm Database Wipe
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This action will permanently delete all recipes from the database. This action cannot be undone.
+                    <br /><br />
+                    <strong>Warning:</strong> All recipe data will be lost forever. Make sure you have exported your data if you want to keep it.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction 
+                    onClick={handleWipeDatabase}
+                    className="bg-red-600 hover:bg-red-700"
+                  >
+                    {wipeLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Wiping...
+                      </>
+                    ) : (
+                      "Yes, Wipe All Recipes"
+                    )}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         </div>
 

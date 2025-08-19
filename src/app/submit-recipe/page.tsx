@@ -192,7 +192,7 @@ export default function SubmitRecipe() {
                     
                     <div className="space-y-2">
                       <Label htmlFor="image" className="text-gray-700 font-medium flex items-center space-x-2">
-                        <Image className="h-4 w-4 text-pink-500" />
+                        <Image className="h-4 w-4 text-pink-500" alt="" />
                         <span>Image URL (optional)</span>
                       </Label>
                       <Input
